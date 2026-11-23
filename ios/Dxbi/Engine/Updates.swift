@@ -17,7 +17,8 @@ enum Updates {
 
     /** The repository it was built from (the Info.plist's, set by the build) */
     static let repo: String = Bundle.main.object(forInfoDictionaryKey: "DxbiUpdateRepo") as? String ?? "notdxbi/dxbi-stremio"
-    private static let asset = "dxbi.ipa"
+    /** The release's file for this app (dxbi.ipa; the Apple TV app's Info.plist names dxbi-tv.ipa) */
+    static let asset: String = Bundle.main.object(forInfoDictionaryKey: "DxbiUpdateAsset") as? String ?? "dxbi.ipa"
     private static let recheck: TimeInterval = 6 * 60 * 60
     private static var lastCheck: Date = .distantPast
     private static let defaults = UserDefaults.standard

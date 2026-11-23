@@ -113,7 +113,9 @@ final class Playback: Identifiable {
         claimSound()
         try? AVAudioSession.sharedInstance().setActive(true)
         UIApplication.shared.isIdleTimerDisabled = true
+        #if os(iOS)
         UIApplication.shared.beginReceivingRemoteControlEvents()
+        #endif
         mpv.onChange = { [weak self] in self?.update() }
         mpv.onLoaded = { [weak self] in self?.loaded() }
         mpv.onEnd = { [weak self] ended, error in

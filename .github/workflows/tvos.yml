@@ -1,28 +1,43 @@
-name: Apple TV probe
+name: Apple TV app
 
-# Builds dx.bi's Apple TV probe (tvos/) on a Mac and keeps dxbi-tv-probe.ipa as the run's artifact,
-# unsigned (Sideloadly signs it with your own Apple ID). Also checks whether MPVKit, the iPhone app's
-# player, builds for tvOS.
+# Builds dx.bi for Apple TV (tvos/) on a Mac and keeps dxbi-tv.ipa as a workflow artifact; publishing a
+# release attaches it to the release. The IPA isn't signed: Sideloadly signs it with your own Apple ID
+# when it installs it.
 on:
   push:
     paths:
       - tvos/**
+      - ios/Dxbi/Engine/**
+      - ios/Dxbi/Player/**
+      - ios/Dxbi/UI/Theme.swift
+      - ios/Dxbi/UI/Cards.swift
+      - dxbi.plugin.js
+      - tv/app/src/main/assets/dxbi-tv.js
+      - tv/app/src/mobile/assets/dxbi-engine.js
       - .github/workflows/tvos.yml
+  pull_request:
+    paths:
+      - tvos/**
+      - ios/Dxbi/Engine/**
+      - ios/Dxbi/Player/**
+      - .github/workflows/tvos.yml
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       runner:
-        description: "Mac to build on (Apple-chip Macs, macos-26, were often busy: the default is Intel)"
+        description: "Mac to build on (GitHub's Apple-chip Macs, macos-26, were often busy: the default is Intel)"
         default: macos-15-intel
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: tvos-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  probe:
+  ipa:
     runs-on: ${{ inputs.runner || 'macos-15-intel' }}
     defaults:
       run:
@@ -33,6 +48,7 @@ jobs:
       - name: Tools
         run: |
           brew install xcodegen
+          # the newest Xcode 26 on this Mac
           xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
           if [ -n "$xcode" ]; then sudo xcode-select -s "$xcode"; fi
           xcodebuild -version
@@ -40,54 +56,39 @@ jobs:
           xcodebuild -showsdks | grep -q appletvos || xcodebuild -downloadPlatform tvOS
           xcodebuild -showsdks | grep appletvos
 
-      - name: Build
-        run: |
-          set -o pipefail
-          xcodegen generate
-          xcodebuild build \
-            -project DxbiProbe.xcodeproj -scheme DxbiProbe -configuration Release \
-            -destination 'generic/platform=tvOS' -derivedDataPath build \
-            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            | xcbeautify --renderer github-actions
-          mkdir -p Payload
-          cp -R build/Build/Products/Release-appletvos/DxbiProbe.app Payload/
-          zip -qry dxbi-tv-probe.ipa Payload
-          ls -lh dxbi-tv-probe.ipa
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dxbi-tv-probe
-          path: tvos/dxbi-tv-probe.ipa
-          if-no-files-found: error
-
-  mpv:
-    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
-    defaults:
-      run:
-        working-directory: tvos
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Tools
-        run: |
-          brew install xcodegen
-          xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
-          if [ -n "$xcode" ]; then sudo xcode-select -s "$xcode"; fi
-          xcodebuild -showsdks | grep -q appletvos || xcodebuild -downloadPlatform tvOS
-
+      # MPVKit (the player) is a large download: kept between runs
       - uses: actions/cache@v4
         with:
           path: tvos/build/SourcePackages
-          key: spm-tvos-${{ hashFiles('tvos/mpvcheck.yml') }}
+          key: spm-tvos-${{ hashFiles('tvos/project.yml') }}
 
-      - name: Build MPVKit for tvOS
+      - name: Build
         run: |
           set -o pipefail
-          xcodegen generate --spec mpvcheck.yml
+          # the app has dx.bi's version (the plugin's), like the other apps
+          version=$(grep -m1 -oE '@version[[:space:]]+[0-9.]+' ../dxbi.plugin.js | awk '{print $2}')
+          xcodegen generate
           xcodebuild build \
-            -project MPVCheck.xcodeproj -scheme MPVCheck -configuration Release \
+            -project Dxbi.xcodeproj -scheme Dxbi -configuration Release \
             -destination 'generic/platform=tvOS' -derivedDataPath build \
             -clonedSourcePackagesDirPath build/SourcePackages \
+            MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            DXBI_UPDATE_REPO="${{ github.repository }}" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             | xcbeautify --renderer github-actions
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-appletvos/Dxbi.app Payload/
+          zip -qry dxbi-tv.ipa Payload
+          ls -lh dxbi-tv.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dxbi-tv
+          path: tvos/dxbi-tv.ipa
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        run: gh release upload "${{ github.event.release.tag_name }}" dxbi-tv.ipa --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -21,14 +21,18 @@ final class PictureInPicture: NSObject {
         let source = AVPictureInPictureController.ContentSource(sampleBufferDisplayLayer: mpv.layer, playbackDelegate: self)
         controller = AVPictureInPictureController(contentSource: source)
         controller?.requiresLinearPlayback = false
+        #if os(iOS)
         controller?.canStartPictureInPictureAutomaticallyFromInline = true
+        #endif
     }
 
     func start() { if possible { controller?.startPictureInPicture() } }
 
     /** The player closed: no more picture in picture (iOS kept offering an empty one on leaving the app) */
     func end() {
+        #if os(iOS)
         controller?.canStartPictureInPictureAutomaticallyFromInline = false
+        #endif
         controller?.stopPictureInPicture()
         controller?.contentSource = nil
         controller = nil
