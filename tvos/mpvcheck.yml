@@ -1,0 +1,32 @@
+# Only built by CI: whether MPVKit (the iPhone app's player, Streamyfin's build) builds for tvOS.
+name: MPVCheck
+options:
+  bundleIdPrefix: com.notdxbi
+  deploymentTarget:
+    tvOS: "17.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: ""
+packages:
+  MPVKit:
+    url: https://github.com/streamyfin/MPVKit.git
+    exactVersion: 0.41.0-av5
+targets:
+  MPVCheck:
+    type: application
+    platform: tvOS
+    sources:
+      - path: MPVCheck
+    dependencies:
+      - package: MPVKit
+        product: MPVKit-GPL
+    info:
+      path: MPVCheck/Info.plist
+      properties:
+        UILaunchScreen: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.notdxbi.dxbi.tvmpvcheck
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGN_IDENTITY: ""

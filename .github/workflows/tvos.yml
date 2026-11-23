@@ -1,0 +1,93 @@
+name: Apple TV probe
+
+# Builds dx.bi's Apple TV probe (tvos/) on a Mac and keeps dxbi-tv-probe.ipa as the run's artifact,
+# unsigned (Sideloadly signs it with your own Apple ID). Also checks whether MPVKit, the iPhone app's
+# player, builds for tvOS.
+on:
+  push:
+    paths:
+      - tvos/**
+      - .github/workflows/tvos.yml
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Mac to build on (macos-15-intel when GitHub's Apple-chip Macs are all busy)"
+        default: macos-26
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tvos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ${{ inputs.runner || 'macos-26' }}
+    defaults:
+      run:
+        working-directory: tvos
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tools
+        run: |
+          brew install xcodegen
+          xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$xcode" ]; then sudo xcode-select -s "$xcode"; fi
+          xcodebuild -version
+          # tvOS's platform isn't always installed with Xcode
+          xcodebuild -showsdks | grep -q appletvos || xcodebuild -downloadPlatform tvOS
+          xcodebuild -showsdks | grep appletvos
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodegen generate
+          xcodebuild build \
+            -project DxbiProbe.xcodeproj -scheme DxbiProbe -configuration Release \
+            -destination 'generic/platform=tvOS' -derivedDataPath build \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            | xcbeautify --renderer github-actions
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-appletvos/DxbiProbe.app Payload/
+          zip -qry dxbi-tv-probe.ipa Payload
+          ls -lh dxbi-tv-probe.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dxbi-tv-probe
+          path: tvos/dxbi-tv-probe.ipa
+          if-no-files-found: error
+
+  mpv:
+    runs-on: ${{ inputs.runner || 'macos-26' }}
+    defaults:
+      run:
+        working-directory: tvos
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tools
+        run: |
+          brew install xcodegen
+          xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$xcode" ]; then sudo xcode-select -s "$xcode"; fi
+          xcodebuild -showsdks | grep -q appletvos || xcodebuild -downloadPlatform tvOS
+
+      - uses: actions/cache@v4
+        with:
+          path: tvos/build/SourcePackages
+          key: spm-tvos-${{ hashFiles('tvos/mpvcheck.yml') }}
+
+      - name: Build MPVKit for tvOS
+        run: |
+          set -o pipefail
+          xcodegen generate --spec mpvcheck.yml
+          xcodebuild build \
+            -project MPVCheck.xcodeproj -scheme MPVCheck -configuration Release \
+            -destination 'generic/platform=tvOS' -derivedDataPath build \
+            -clonedSourcePackagesDirPath build/SourcePackages \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            | xcbeautify --renderer github-actions

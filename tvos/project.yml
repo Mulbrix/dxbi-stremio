@@ -1,0 +1,41 @@
+# dx.bi's Apple TV probe: finds out, on a real Apple TV, whether the iPhone app's engine (Stremio's web
+# app in a web view) can run on tvOS. XcodeGen makes the Xcode project from this; GitHub Actions builds
+# it (.github/workflows/tvos.yml).
+name: DxbiProbe
+options:
+  bundleIdPrefix: com.notdxbi
+  deploymentTarget:
+    tvOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+targets:
+  DxbiProbe:
+    type: application
+    platform: tvOS
+    sources:
+      - path: Probe
+    info:
+      path: Probe/Info.plist
+      properties:
+        CFBundleDisplayName: dx.bi probe
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIUserInterfaceStyle: Dark
+        UIRequiredDeviceCapabilities:
+          - arm64
+        ITSAppUsesNonExemptEncryption: false
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.notdxbi.dxbi.tvprobe
+        SWIFT_OBJC_BRIDGING_HEADER: Probe/Probe-Bridging-Header.h
+        CLANG_ENABLE_OBJC_ARC: YES
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGN_IDENTITY: ""
