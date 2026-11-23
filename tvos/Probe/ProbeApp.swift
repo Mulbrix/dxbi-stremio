@@ -167,7 +167,7 @@ final class Probe {
 
         // 2. Stremio's web app, and whether its core starts
         let stremio = add(.running, "\(kind): Stremio's core", "loading web.stremio.com…")
-        web.loadURL(URL(string: "https://web.stremio.com/")!)
+        web.load(URL(string: "https://web.stremio.com/")!)
         let started = Date()
         var core = false
         var last = ""
