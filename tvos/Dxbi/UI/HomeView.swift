@@ -1,6 +1,14 @@
 // dx.bi — Copyright (C) 2026 dx.bi. GNU General Public License, version 3 or later (see LICENSE).
 import SwiftUI
 
+extension Array where Element == Title {
+    /** Each title once (addons sometimes list one twice, and SwiftUI's rows need each just once) */
+    var unique: [Title] {
+        var seen = Set<String>()
+        return filter { seen.insert($0.id).inserted }
+    }
+}
+
 /** TV sizes */
 enum TV {
     /** tvOS's own side margin */
@@ -41,7 +49,7 @@ struct HomeView: View {
                             NavigationLink(value: Route.title(TitleRef(type: "series", id: item.id, name: item.name))) {
                                 AiringCard(item: item, width: TV.wide)
                             }
-                            .buttonStyle(.card)
+                            .buttonStyle(Lift())
                         }
                     }
                 }
@@ -67,7 +75,7 @@ struct HomeView: View {
 
     private func titleRow(_ name: String, _ items: [Title], rank: Bool = false, see: Route? = nil) -> some View {
         Shelf(title: name, see: see) {
-            ForEach(Array(items.prefix(rank ? 10 : 30).enumerated()), id: \.element.id) { i, title in
+            ForEach(Array(items.unique.prefix(rank ? 10 : 30).enumerated()), id: \.element.id) { i, title in
                 PosterButton(title: title, rank: rank ? i + 1 : nil)
             }
         }
@@ -80,6 +88,29 @@ struct HomeView: View {
             }
         }
         .redacted(reason: .placeholder)
+    }
+}
+
+/**
+ * How a card shows the remote's focus: it grows and lifts off the page, as tvOS's own cards do, but
+ * without tvOS's card style's grey backing (its corners showed round the cards' own)
+ */
+struct Lift: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { Body(configuration: configuration) }
+
+    private struct Body: View {
+        let configuration: Configuration
+        @Environment(\.isFocused) private var focused
+
+        var body: some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? 1.03 : focused ? 1.1 : 1)
+                .brightness(focused ? 0.06 : 0)
+                .shadow(color: .black.opacity(focused ? 0.7 : 0), radius: focused ? 24 : 0, y: focused ? 16 : 0)
+                .zIndex(focused ? 1 : 0)
+                .animation(.easeOut(duration: 0.18), value: focused)
+                .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+        }
     }
 }
 
@@ -103,9 +134,9 @@ struct Shelf<Content: View>: View {
                             }
                             .frame(width: TV.poster * 0.8, height: TV.poster * 1.5)
                             .foregroundStyle(.white)
-                            .background(Dx.raised)
+                            .background(Dx.raised, in: .rect(cornerRadius: 18))
                         }
-                        .buttonStyle(.card)
+                        .buttonStyle(Lift())
                     }
                 }
                 .padding(.horizontal, TV.gutter)
@@ -127,7 +158,7 @@ struct PosterButton: View {
         NavigationLink(value: Route.title(title.ref)) {
             PosterCard(title: title, width: width, rank: rank)
         }
-        .buttonStyle(.card)
+        .buttonStyle(Lift())
         .contextMenu { TitleMenu(title: title) }
     }
 }
@@ -150,7 +181,7 @@ private struct ContinueTile: View {
         NavigationLink(value: Route.title(TitleRef(type: item.title.type, id: item.title.id, name: item.title.name, play: true))) {
             ContinueCard(item: item, width: TV.wide)
         }
-        .buttonStyle(.card)
+        .buttonStyle(Lift())
         .contextMenu {
             NavigationLink(value: Route.title(item.title.ref)) { Label("Details", systemImage: "info.circle") }
             Button(role: .destructive) { stremio.removeFromContinue(item.title.id) } label: { Label("Remove from Continue Watching", systemImage: "eye.slash") }

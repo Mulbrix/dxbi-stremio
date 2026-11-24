@@ -45,7 +45,12 @@ final class PlayerHost: UIHostingController<AnyView> {
     static func hide() {
         guard let host = shown else { return }
         shown = nil
-        host.dismiss(animated: true)
+        let presenter = host.presentingViewController
+        host.dismiss(animated: true) {
+            // the remote's focus back on the app's screens (left nowhere, Menu would leave the app)
+            presenter?.setNeedsFocusUpdate()
+            presenter?.updateFocusIfNeeded()
+        }
     }
 
     /** Gone some other way than closing (tvOS took it away): the stream stops and Stremio hears where it got to */

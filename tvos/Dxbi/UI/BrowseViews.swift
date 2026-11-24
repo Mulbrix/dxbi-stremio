@@ -8,9 +8,10 @@ struct PosterGrid: View {
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: TV.poster, maximum: TV.poster + 20), spacing: TV.rowSpacing)], spacing: 60) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { i, title in
+            let shown = items.unique
+            ForEach(Array(shown.enumerated()), id: \.element.id) { i, title in
                 PosterButton(title: title)
-                    .onAppear { if i >= items.count - 6 { onEnd?() } }
+                    .onAppear { if i >= shown.count - 6 { onEnd?() } }
             }
         }
         .padding(.horizontal, TV.gutter)
@@ -19,61 +20,45 @@ struct PosterGrid: View {
 
 // MARK: - Search
 
+/**
+ * Search: tvOS's own keyboard (a text field, which also takes typing from an iPhone), searched when
+ * it's sent, then a row of results from each addon. (SwiftUI's searchable froze the app on Apple TV.)
+ */
 struct SearchView: View {
     @Environment(Stremio.self) private var stremio
     @State private var query = ""
     @State private var searched = ""
     @AppStorage("recentSearches") private var recentText = ""
+    @FocusState private var fieldFocused: Bool
 
     private var recent: [String] { recentText.split(separator: "\n").map(String.init) }
 
     var body: some View {
         ScrollView {
-            if searched.isEmpty {
-                VStack(alignment: .leading, spacing: 24) {
-                    if !recent.isEmpty {
-                        Text("Recent Searches").font(.title3.bold())
-                        ScrollView(.horizontal) {
-                            HStack(spacing: 20) {
-                                ForEach(recent, id: \.self) { r in
-                                    Button { query = r; run() } label: { Label(r, systemImage: "clock.arrow.circlepath") }
-                                }
-                                Button("Clear") { recentText = "" }
-                            }
-                            .padding(.vertical, 12)
+            VStack(alignment: .leading, spacing: 56) {
+                HStack(spacing: 24) {
+                    TextField("Search films, shows, people", text: $query)
+                        .focused($fieldFocused)
+                        .submitLabel(.search)
+                        .autocorrectionDisabled()
+                        .onSubmit(run)
+                        .frame(maxWidth: 1100)
+                    if !searched.isEmpty {
+                        Button("Clear") {
+                            query = ""
+                            searched = ""
+                            fieldFocused = true
                         }
-                        .scrollClipDisabled()
-                    } else {
-                        Text("Films, series and anime; actors, directors and writers; channels and TV from your addons.")
-                            .font(.headline)
-                            .foregroundStyle(Dx.muted)
-                            .padding(.top, 40)
                     }
                 }
                 .padding(.horizontal, TV.gutter)
-            } else {
-                LazyVStack(alignment: .leading, spacing: 56) {
-                    let rows = stremio.search.filter { !$0.items.isEmpty }
-                    ForEach(rows) { row in
-                        Shelf(title: row.heading, see: row.discover.map { .browse(link: $0, name: row.heading) }) {
-                            ForEach(row.items) { title in PosterButton(title: title) }
-                        }
-                    }
-                    if rows.isEmpty {
-                        if stremio.search.contains(where: { $0.state == .loading }) || stremio.search.isEmpty {
-                            ProgressView().frame(maxWidth: .infinity).padding(60)
-                        } else {
-                            ContentUnavailableView.search(text: searched).focusable()
-                        }
-                    }
-                }
+                .padding(.top, 30)
+                if searched.isEmpty { start } else { results }
             }
+            .padding(.bottom, 60)
         }
         .scrollClipDisabled()
-        .padding(.bottom, 40)
         .screenBackground()
-        .searchable(text: $query, prompt: "Films, shows, people")
-        .onSubmit(of: .search, run)
         // a name pressed on a title's page
         .onChange(of: stremio.pendingSearch, initial: true) { _, q in
             guard let q else { return }
@@ -81,26 +66,63 @@ struct SearchView: View {
             query = q
             run()
         }
-        .onChange(of: query) { _, q in if q.isEmpty { searched = "" } }
-        .task(id: query) {
-            // as they type, after a moment's pause
-            let q = query.trimmingCharacters(in: .whitespaces)
-            guard q.count >= 3 else { return }
-            try? await Task.sleep(for: .milliseconds(700))
-            if !Task.isCancelled, q != searched { searched = q; stremio.search(q); remember(q) }
+    }
+
+    @ViewBuilder
+    private var start: some View {
+        if !recent.isEmpty {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Recent Searches").font(.title3.bold()).padding(.horizontal, TV.gutter)
+                ScrollView(.horizontal) {
+                    HStack(spacing: 20) {
+                        ForEach(recent, id: \.self) { r in
+                            Button { query = r; run() } label: { Label(r, systemImage: "clock.arrow.circlepath") }
+                        }
+                        Button("Clear") { recentText = "" }
+                    }
+                    .padding(.horizontal, TV.gutter)
+                    .padding(.vertical, 12)
+                }
+                .scrollClipDisabled()
+                .scrollIndicators(.hidden)
+            }
+        } else {
+            Text("Films, series and anime; actors, directors and writers; channels and TV from your addons.")
+                .font(.headline)
+                .foregroundStyle(Dx.muted)
+                .padding(.horizontal, TV.gutter)
+        }
+    }
+
+    @ViewBuilder
+    private var results: some View {
+        let rows = stremio.search.filter { !$0.items.isEmpty }
+        if rows.isEmpty {
+            if stremio.search.contains(where: { $0.state == .loading }) || stremio.search.isEmpty {
+                ProgressView().frame(maxWidth: .infinity).padding(60)
+            } else {
+                Text("Nothing found for “\(searched)”. Check the spelling, or try another name.")
+                    .font(.headline)
+                    .foregroundStyle(Dx.muted)
+                    .padding(.horizontal, TV.gutter)
+            }
+        } else {
+            LazyVStack(alignment: .leading, spacing: 56) {
+                ForEach(rows) { row in
+                    Shelf(title: row.heading, see: row.discover.map { .browse(link: $0, name: row.heading) }) {
+                        ForEach(row.items.unique) { title in PosterButton(title: title) }
+                    }
+                }
+            }
         }
     }
 
     private func run() {
         let q = query.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty else { return }
+        guard !q.isEmpty, q != searched || stremio.search.isEmpty else { return }
         searched = q
         stremio.search(q)
-        remember(q)
-    }
-
-    private func remember(_ q: String) {
-        recentText = ([q] + recent.filter { $0 != q && !q.hasPrefix($0) }).prefix(8).joined(separator: "\n")
+        recentText = ([q] + recent.filter { $0.caseInsensitiveCompare(q) != .orderedSame }).prefix(8).joined(separator: "\n")
     }
 }
 
@@ -168,6 +190,7 @@ struct DiscoverView: View {
 /** A row's See All */
 struct BrowseView: View {
     @Environment(Stremio.self) private var stremio
+    @Environment(\.dismiss) private var dismiss
     var link: String
     var name: String
 
@@ -185,6 +208,7 @@ struct BrowseView: View {
         .scrollClipDisabled()
         .screenBackground()
         .onAppear { stremio.discover(link: link) }
+        .onExitCommand { dismiss() }
     }
 }
 

@@ -8,6 +8,7 @@ import SwiftUI
  */
 struct TitleView: View {
     @Environment(Stremio.self) private var stremio
+    @Environment(\.dismiss) private var dismiss
     var ref: TitleRef
 
     @State private var choices: StreamChoices?
@@ -88,6 +89,14 @@ struct TitleView: View {
             if let c = current, c.justPlay, waitingFor == c.videoId, let pick = c.picked { play(pick) }
         }
         .onAppear { playFocused = true }
+        // Menu goes back to where the title was opened from, always (with nothing focused, tvOS took
+        // it as leaving the app)
+        .onExitCommand { dismiss() }
+        // back from the player: the focus comes back to the page (it was left nowhere)
+        .onChange(of: stremio.playback == nil) { _, closed in
+            guard closed else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { playFocused = true }
+        }
     }
 
     // MARK: - Playing
@@ -169,11 +178,11 @@ struct TitleView: View {
     private var buttons: some View {
         let inList = title.inLibrary
         return HStack(spacing: 24) {
-            Button { start(details.flatMap(nextVideo)?.id) } label: {
+            Button { if details?.state == .ready { start(details.flatMap(nextVideo)?.id) } } label: {
                 Label(playLabel, systemImage: "play.fill").padding(.horizontal, 16)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(details?.state != .ready)
+            .opacity(details?.state == .ready ? 1 : 0.6)
             .focused($playFocused)
             Button {
                 stremio.setInLibrary(!inList)
@@ -236,7 +245,7 @@ struct TitleView: View {
         Button { start(v.id) } label: {
             EpisodeCard(video: v, width: 440, fallbackArt: title.backdrop, playing: v.id == nextVideo(d)?.id)
         }
-        .buttonStyle(.card)
+        .buttonStyle(Lift())
         .contextMenu {
             Button { start(v.id) } label: { Label("Play", systemImage: "play.fill") }
             Button {
@@ -296,7 +305,7 @@ struct TitleView: View {
                 .frame(width: 160, height: 160)
                 .clipShape(.circle)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(Lift())
             Text(name).font(.callout).lineLimit(2).multilineTextAlignment(.center)
             if let role, !role.isEmpty { Text(role).font(.caption).foregroundStyle(Dx.muted).lineLimit(1) }
         }
