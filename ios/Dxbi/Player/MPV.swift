@@ -55,8 +55,18 @@ final class MPV {
         handle = mpv
         option("wid", layer)
         set("vo", "avfoundation")
+        #if os(tvOS)
+        // Apple TV, as Streamyfin runs this build of mpv there: subtitles over the picture rather than
+        // drawn into each frame (drawing them into 4K HDR frames made the app quit), the video's HDR
+        // passed on to the TV, and Apple's audio output named
+        set("avfoundation-composite-osd", "no")
+        set("target-colorspace-hint", "yes")
+        set("ao", "audiounit")
+        set("hwdec-codecs", "all")
+        #else
         // subtitles drawn into the picture, so they show in picture in picture too
         set("avfoundation-composite-osd", "yes")
+        #endif
         set("hwdec", "videotoolbox")
         set("hwdec-software-fallback", "yes")
         set("video-rotate", "no")
@@ -65,8 +75,14 @@ final class MPV {
         set("idle", "yes")
         set("subs-fallback", "yes")
         set("cache", "yes")
+        #if os(tvOS)
+        // (an Apple TV gives an app less memory than a phone does, and 4K HDR frames take a lot of it)
+        set("demuxer-max-bytes", "96MiB")
+        set("demuxer-max-back-bytes", "24MiB")
+        #else
         set("demuxer-max-bytes", "150MiB")
         set("demuxer-max-back-bytes", "50MiB")
+        #endif
         set("network-timeout", "30")
         set("user-agent", "Mozilla/5.0 dx.bi")
         set("sub-ass-override", "scale")
@@ -90,8 +106,13 @@ final class MPV {
         guard let mpv = handle else { return }
         handle = nil
         mpv_set_wakeup_callback(mpv, nil, nil)
-        // (after anything still on its way to it)
-        control.async { mpv_terminate_destroy(mpv) }
+        // (after anything still on its way to it; the layer kept until mpv has let go of it, or its
+        // video output could draw into a layer that's gone)
+        let layer = self.layer
+        control.async {
+            mpv_terminate_destroy(mpv)
+            withExtendedLifetime(layer) {}
+        }
         layer.sampleBufferRenderer.flush(removingDisplayedImage: true, completionHandler: nil)
     }
 
@@ -128,6 +149,17 @@ final class MPV {
             defer { for p in cargs where p != nil { free(UnsafeMutablePointer(mutating: p)) } }
             if wait { mpv_command(handle, &cargs) } else { mpv_command_async(handle, 0, &cargs) }
         }
+    }
+
+    /**
+     * What the picture is, once mpv has it: its transfer (pq, hlg, bt.1886…), its size and its frame
+     * rate (for the TV to switch to: Match Content on an Apple TV). nil until the video has started
+     */
+    var videoFormat: (transfer: String, width: Int, height: Int, fps: Double)? {
+        guard let transfer = string("video-params/gamma"), !transfer.isEmpty,
+              let width = Int(string("video-params/w") ?? ""), let height = Int(string("video-params/h") ?? "") else { return nil }
+        let fps = Double(string("container-fps") ?? "") ?? Double(string("estimated-vf-fps") ?? "") ?? 0
+        return (transfer, width, height, fps)
     }
 
     private func string(_ name: String) -> String? {

@@ -56,6 +56,7 @@ final class PlayerHost: UIHostingController<AnyView> {
     static func hide() {
         guard let host = shown else { return }
         shown = nil
+        DisplayMatch.reset()
         let presenter = host.presentingViewController
         host.dismiss(animated: true) {
             // the remote's focus back on the app's screens (left nowhere, Menu would leave the app)
@@ -69,6 +70,7 @@ final class PlayerHost: UIHostingController<AnyView> {
         super.viewDidDisappear(animated)
         if Self.shown === self {
             Self.shown = nil
+            DisplayMatch.reset()
             playback?.finish(ended: false)
         }
     }

@@ -56,6 +56,8 @@ struct PlayerScreen: View {
         }
         .onReceive(clock) { now = $0 }
         .onAppear { poke() }
+        // the TV to the video's HDR and frame rate (Match Content), once mpv knows them
+        .task { await DisplayMatch.follow(playback.mpv) }
     }
 
     // MARK: - The remote, with the controls away
