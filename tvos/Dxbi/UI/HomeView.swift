@@ -96,9 +96,9 @@ struct HomeView: View {
  * without tvOS's card style's grey backing (its corners showed round the cards' own)
  */
 struct Lift: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View { Body(configuration: configuration) }
+    func makeBody(configuration: Configuration) -> some View { LiftedLabel(configuration: configuration) }
 
-    private struct Body: View {
+    private struct LiftedLabel: View {
         let configuration: Configuration
         @Environment(\.isFocused) private var focused
 

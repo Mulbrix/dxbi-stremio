@@ -191,9 +191,10 @@ final class Page: NSObject {
           return JSON.stringify(kept);
         })()
         """
+        let file = Self.storageFile
         web?.evaluate(script) { result, _ in
             guard let text = result as? String, text.contains("\"profile\"") else { return }
-            try? text.write(to: Self.storageFile, atomically: true, encoding: .utf8)
+            try? text.write(to: file, atomically: true, encoding: .utf8)
         }
     }
 
