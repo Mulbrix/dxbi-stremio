@@ -20,6 +20,11 @@ on:
       - tvos/**
       - ios/Dxbi/Engine/**
       - ios/Dxbi/Player/**
+      - ios/Dxbi/UI/Theme.swift
+      - ios/Dxbi/UI/Cards.swift
+      - dxbi.plugin.js
+      - tv/app/src/main/assets/dxbi-tv.js
+      - tv/app/src/mobile/assets/dxbi-engine.js
       - .github/workflows/tvos.yml
   release:
     types: [published]
@@ -29,8 +34,9 @@ on:
         description: "Mac to build on (GitHub's Apple-chip Macs, macos-26, were often busy: the default is Intel)"
         default: macos-15-intel
 
+# Read-only: only the release job, which attaches the IPA, can write
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: tvos-${{ github.ref }}
@@ -67,6 +73,7 @@ jobs:
           set -o pipefail
           # the app has dx.bi's version (the plugin's), like the other apps
           version=$(grep -m1 -oE '@version[[:space:]]+[0-9.]+' ../dxbi.plugin.js | awk '{print $2}')
+          if [ -z "$version" ]; then echo "::error::No @version in dxbi.plugin.js"; exit 1; fi
           xcodegen generate
           xcodebuild build \
             -project Dxbi.xcodeproj -scheme Dxbi -configuration Release \
@@ -87,8 +94,20 @@ jobs:
           path: tvos/dxbi-tv.ipa
           if-no-files-found: error
 
+  release:
+    needs: ipa
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dxbi-tv
       - name: Attach to the release
-        if: github.event_name == 'release'
-        run: gh release upload "${{ github.event.release.tag_name }}" dxbi-tv.ipa --clobber
+        # (the tag through the environment, not written into the script: a tag name can hold shell code)
+        run: gh release upload "$TAG" dxbi-tv.ipa --clobber --repo "$REPO"
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}

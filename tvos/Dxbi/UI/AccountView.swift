@@ -252,14 +252,20 @@ private struct SettingRow: View {
         default:
             VStack(alignment: .leading, spacing: 8) {
                 label
-                TextField("Not set", text: $text)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .onSubmit { onChange(Json.encode(text)) }
-                    .onAppear { text = setting.textValue }
+                Group {
+                    // an API key isn't left showing on the TV for the room to read
+                    if secret { SecureField("Not set", text: $text) } else { TextField("Not set", text: $text) }
+                }
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .onSubmit { onChange(Json.encode(text)) }
+                .onAppear { text = setting.textValue }
             }
         }
     }
+
+    /** A key or token (tmdbKey, mdblistKey) */
+    private var secret: Bool { setting.key.hasSuffix("Key") || setting.key.hasSuffix("Token") }
 
     private var label: some View {
         VStack(alignment: .leading, spacing: 4) {

@@ -280,19 +280,32 @@ final class Stremio {
 
     /** A Discover link (a row's See All: #/discover/<addon>/<type>/<catalog>?genre=…) */
     func discover(link: String) {
-        guard let m = link.wholeMatch(of: /#\/discover\/([^\/]+)\/([^\/]+)\/([^\/?]+)(?:\?(.*))?/) else { return }
+        if let request = Self.discoverRequest(link: link) { discover(request: request) }
+    }
+
+    func discover(base: String, type: String, catalog: String, extra: [[String]] = []) {
+        discover(request: Self.discoverRequest(base: base, type: type, catalog: catalog, extra: extra))
+    }
+
+    /** A catalog request, as Stremio's CatalogWithFilters takes it (and gives it back in `discover.request`) */
+    func discover(request: JSON) {
+        Task { await ask("load", ["field": "discover", "model": "CatalogWithFilters", "args": ["request": request]]) }
+    }
+
+    /** The catalog request a Discover link stands for (nil: not a Discover link) */
+    static func discoverRequest(link: String) -> JSON? {
+        guard let m = link.wholeMatch(of: /#\/discover\/([^\/]+)\/([^\/]+)\/([^\/?]+)(?:\?(.*))?/) else { return nil }
         let decode = { (s: Substring) in String(s).removingPercentEncoding ?? String(s) }
         var extra: [[String]] = []
         for pair in (m.output.4 ?? "").split(separator: "&") where pair.contains("=") {
             let kv = pair.split(separator: "=", maxSplits: 1)
             extra.append([decode(kv[0]), decode(kv[1])])
         }
-        discover(base: decode(m.output.1), type: decode(m.output.2), catalog: decode(m.output.3), extra: extra)
+        return discoverRequest(base: decode(m.output.1), type: decode(m.output.2), catalog: decode(m.output.3), extra: extra)
     }
 
-    func discover(base: String, type: String, catalog: String, extra: [[String]] = []) {
-        let request: JSON = ["base": base, "path": ["resource": "catalog", "type": type, "id": catalog, "extra": extra] as JSON]
-        Task { await ask("load", ["field": "discover", "model": "CatalogWithFilters", "args": ["request": request]]) }
+    static func discoverRequest(base: String, type: String, catalog: String, extra: [[String]] = []) -> JSON {
+        ["base": base, "path": ["resource": "catalog", "type": type, "id": catalog, "extra": extra] as JSON]
     }
 
     /** The same catalog with another genre (nil: all) */
@@ -349,6 +362,10 @@ final class Stremio {
 
     func signOut() {
         guest = false
+        #if os(tvOS)
+        // (the Apple TV app's copy of the sign-in goes too, so it can't be put back)
+        page.forgetStorage()
+        #endif
         Task { await ask("signOut") }
     }
 

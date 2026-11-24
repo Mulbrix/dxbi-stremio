@@ -287,7 +287,7 @@ struct PlayerScreen: View {
         hideTask?.cancel()
         panelFrom = from
         panel = p
-        let first = max(options(p).firstIndex(where: \.on) ?? 0, 0)
+        let first = options(p).firstIndex(where: \.on) ?? 0
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { focus = .option(first) }
     }
 

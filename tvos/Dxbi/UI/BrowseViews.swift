@@ -128,14 +128,29 @@ struct SearchView: View {
 
 // MARK: - Discover
 
+/**
+ * Which catalog a Discover request is (its type, catalog and genre; not the page), to tell Discover's
+ * own from a See All's: the two share Stremio's one Discover. (Not the addon's address: the page may
+ * write it otherwise than the link did, and a See All would then wait for ever.)
+ */
+func catalogKey(_ request: JSON?) -> String? {
+    guard let request, let path = request.object("path") else { return nil }
+    let extra = ((path["extra"] as? [Any]) ?? []).compactMap { $0 as? [String] }
+    let genre = extra.first { $0.first == "genre" }?.last ?? ""
+    return [path.string("type"), path.string("id"), genre].joined(separator: "|")
+}
+
 /** Every catalog the addons have, by type, catalog and genre */
 struct DiscoverView: View {
     @Environment(Stremio.self) private var stremio
+    /** The catalog chosen here last (a See All may have shown another one since) */
+    @State private var mine: JSON?
+    @State private var showing = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 40) {
-                if let d = stremio.discover {
+                if let d = stremio.discover, mine == nil || catalogKey(d.request) == catalogKey(mine) {
                     pickers(d)
                     PosterGrid(items: d.items) { if d.nextPage { stremio.discoverMore() } }
                     if d.state == .loading { ProgressView().frame(maxWidth: .infinity).padding() }
@@ -150,7 +165,15 @@ struct DiscoverView: View {
         }
         .scrollClipDisabled()
         .screenBackground()
-        .onAppear { stremio.discoverStart() }
+        .onAppear {
+            showing = true
+            // back from a See All: Discover's own catalog again
+            if let mine, catalogKey(mine) != catalogKey(stremio.discover?.request) { stremio.discover(request: mine) } else { stremio.discoverStart() }
+        }
+        .onDisappear { showing = false }
+        .onChange(of: catalogKey(stremio.discover?.request)) {
+            if showing, let request = stremio.discover?.request { mine = request }
+        }
         .onChange(of: stremio.allRows.count) { stremio.discoverStart() }
     }
 
@@ -198,9 +221,12 @@ struct BrowseView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 40) {
                 Text(name).font(.title2.bold()).padding(.horizontal, TV.gutter)
-                if let d = stremio.discover {
+                // (until it's this row's catalog, Discover's is still there: not shown)
+                if let d = stremio.discover, catalogKey(d.request) == catalogKey(Stremio.discoverRequest(link: link)) {
                     PosterGrid(items: d.items) { if d.nextPage { stremio.discoverMore() } }
                     if d.state == .loading { ProgressView().frame(maxWidth: .infinity).padding() }
+                } else {
+                    ProgressView().frame(maxWidth: .infinity).padding(80)
                 }
             }
             .padding(.vertical, 40)

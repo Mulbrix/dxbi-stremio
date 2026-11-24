@@ -29,7 +29,7 @@ final class PlayerHost: UIHostingController<AnyView> {
         host.view.backgroundColor = .black
         shown = host
         page = stremio.page.webView
-        present(host, playback: playback, tries: 0)
+        present(host, playback: playback, stremio: stremio, tries: 0)
     }
 
     /**
@@ -37,21 +37,30 @@ final class PlayerHost: UIHostingController<AnyView> {
      * pressed): it waits for that, and tries again
      */
     @MainActor
-    private static func present(_ host: PlayerHost, playback: Playback, tries: Int) {
+    private static func present(_ host: PlayerHost, playback: Playback, stremio: Stremio, tries: Int) {
         guard shown === host, host.presentingViewController == nil else { return }
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
-              var top = scene.keyWindow?.rootViewController else { return }
+              var top = scene.keyWindow?.rootViewController else { return giveUp(host, playback: playback, stremio: stremio) }
         while let next = top.presentedViewController, !next.isBeingDismissed { top = next }
         let busy = top.transitionCoordinator != nil || top.isBeingDismissed || top.isBeingPresented || top.presentedViewController != nil
         if busy {
-            guard tries < 40 else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { present(host, playback: playback, tries: tries + 1) }
+            guard tries < 40 else { return giveUp(host, playback: playback, stremio: stremio) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { present(host, playback: playback, stremio: stremio, tries: tries + 1) }
             return
         }
         // (sideways only once the player is there to be sideways)
         AppDelegate.orientations = .landscape
         if let page { PageBox.lend(page, to: host.view) }
         top.present(host, animated: true)
+    }
+
+    /** It couldn't be shown: the stream stops too, rather than play on with no screen to stop it from */
+    @MainActor
+    private static func giveUp(_ host: PlayerHost, playback: Playback, stremio: Stremio) {
+        guard shown === host else { return }
+        shown = nil
+        playback.finish(ended: false)
+        stremio.show("The player couldn't open: try again")
     }
 
     @MainActor

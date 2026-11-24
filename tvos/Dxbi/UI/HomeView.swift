@@ -199,13 +199,15 @@ private struct Billboard: View {
     @State private var index = 0
     @FocusState private var focused: Int?
 
-    private var current: Title { titles[min(index, titles.count - 1)] }
+    /** [index] within the titles there are now (the list can get shorter while it's showing) */
+    private var shown: Int { titles.isEmpty ? 0 : index % titles.count }
+    private var current: Title { titles[shown] }
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             ZStack {
                 ForEach(Array(titles.enumerated()), id: \.element.id) { i, title in
-                    if i == index { picture(title).transition(.opacity) }
+                    if i == shown { picture(title).transition(.opacity) }
                 }
             }
             info(current)
@@ -215,7 +217,7 @@ private struct Billboard: View {
         // turns by itself; moving about on it starts the wait again
         .task(id: "\(index)-\(titles.count)-\(focused ?? -1)") {
             try? await Task.sleep(for: .seconds(10))
-            if !Task.isCancelled && titles.count > 1 { go(index + 1) }
+            if !Task.isCancelled && titles.count > 1 { go(shown + 1) }
         }
     }
 
@@ -264,7 +266,7 @@ private struct Billboard: View {
                 }
                 .focused($focused, equals: 2)
                 if titles.count > 1 {
-                    Button { go(index + 1) } label: { Image(systemName: "chevron.right") }
+                    Button { go(shown + 1) } label: { Image(systemName: "chevron.right") }
                         .focused($focused, equals: 3)
                         .accessibilityLabel("Next")
                 }
@@ -272,10 +274,10 @@ private struct Billboard: View {
             .padding(.top, 10)
             HStack(spacing: 10) {
                 ForEach(titles.indices, id: \.self) { i in
-                    Capsule().fill(i == index ? .white : .white.opacity(0.35)).frame(width: i == index ? 28 : 9, height: 9)
+                    Capsule().fill(i == shown ? .white : .white.opacity(0.35)).frame(width: i == shown ? 28 : 9, height: 9)
                 }
             }
-            .animation(.snappy, value: index)
+            .animation(.snappy, value: shown)
             .padding(.top, 6)
         }
         .padding(.horizontal, TV.gutter)

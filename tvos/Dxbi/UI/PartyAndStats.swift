@@ -232,9 +232,16 @@ struct StatsView: View {
         return h > 0 ? String(format: "%dh %02dm", h, m) : "\(m)m"
     }
 
-    private func day(_ key: String) -> Date {
+    /** The stats' day keys (2026-11-24): Gregorian whatever calendar the Apple TV is set to */
+    private static let dayKey: DateFormatter = {
         let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .gregorian)
         f.dateFormat = "yyyy-MM-dd"
-        return f.date(from: key) ?? .now
+        return f
+    }()
+
+    private func day(_ key: String) -> Date {
+        Self.dayKey.date(from: key) ?? .now
     }
 }

@@ -55,6 +55,11 @@
 @property (nullable, nonatomic, readonly) id targetFrame;
 @end
 
+// WebKit's enum values (WKNavigationActionPolicy, WKUserScriptInjectionTime)
+static const NSInteger DxWKNavigationActionPolicyCancel = 0;
+static const NSInteger DxWKNavigationActionPolicyAllow = 1;
+static const NSInteger DxWKUserScriptInjectionTimeAtDocumentStart = 0;
+
 @interface DxWebView ()
 - (void)received:(id)message;
 - (NSInteger)decide:(id)action;
@@ -72,8 +77,7 @@
 }
 - (void)webView:(id)webView decidePolicyForNavigationAction:(id)action decisionHandler:(void (^)(NSInteger))decisionHandler {
     DxWebView *owner = self.owner;
-    // (WKNavigationActionPolicyCancel 0, Allow 1)
-    decisionHandler(owner ? [owner decide:action] : 1);
+    decisionHandler(owner ? [owner decide:action] : DxWKNavigationActionPolicyAllow);
 }
 - (void)webViewWebContentProcessDidTerminate:(id)webView {
     [self.owner terminated];
@@ -128,8 +132,7 @@ static BOOL looked;
         _handler.owner = self;
         id<DxWKUserContentController> controller = config.userContentController;
         [controller addScriptMessageHandler:_handler name:name];
-        // (WKUserScriptInjectionTimeAtDocumentStart is 0)
-        id<DxWKUserScript> start = [(id<DxWKUserScript>)[NSClassFromString(@"WKUserScript") alloc] initWithSource:script injectionTime:0 forMainFrameOnly:YES];
+        id<DxWKUserScript> start = [(id<DxWKUserScript>)[NSClassFromString(@"WKUserScript") alloc] initWithSource:script injectionTime:DxWKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:YES];
         [controller addUserScript:start];
 
         _web = [(id<DxWKWebView>)[NSClassFromString(@"WKWebView") alloc] initWithFrame:frame configuration:config];
@@ -182,11 +185,11 @@ static BOOL looked;
 }
 
 - (NSInteger)decide:(id<DxWKNavigationAction>)action {
-    if (!self.onNavigate) return 1;
+    if (!self.onNavigate) return DxWKNavigationActionPolicyAllow;
     id<DxWKFrameInfo> target = action.targetFrame;
     // (no frame: a new window, treated as the main one)
     BOOL main = target ? target.isMainFrame : YES;
-    return self.onNavigate(action.request.URL, main) == DxNavigationAllow ? 1 : 0;
+    return self.onNavigate(action.request.URL, main) == DxNavigationAllow ? DxWKNavigationActionPolicyAllow : DxWKNavigationActionPolicyCancel;
 }
 
 - (void)terminated {

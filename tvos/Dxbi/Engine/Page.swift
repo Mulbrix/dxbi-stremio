@@ -35,6 +35,8 @@ final class Page: NSObject {
     private var pending: [Int: CheckedContinuation<Any?, Error>] = [:]
     private var watched: [String] = []
     private var keeping: Task<Void, Never>?
+    /** Goes up when the kept sign-in is forgotten: a copy asked for before then isn't written */
+    private var storageGeneration = 0
 
     /** Stremio's core is up (it starts again with the page) */
     var onReady: (() -> Void)?
@@ -108,6 +110,8 @@ final class Page: NSObject {
             "device": "\(model) · dx.bi for Apple TV",
             "ios": UIDevice.current.systemVersion,
             "tvos": UIDevice.current.systemVersion,
+            // (a phone to the plugin, as the iPhone app is: it takes the same ways as there, its
+            // stream picking and the app's own screens, rather than a browser's or Android TV's)
             "phone": true,
         ]
         let shim = """
@@ -180,6 +184,7 @@ final class Page: NSObject {
 
     private func keepStorage() {
         guard web != nil else { return }
+        let generation = storageGeneration
         let script = """
         (function () {
           const kept = {};
@@ -192,9 +197,25 @@ final class Page: NSObject {
         })()
         """
         let file = Self.storageFile
-        web?.evaluate(script) { result, _ in
-            guard let text = result as? String, text.contains("\"profile\"") else { return }
-            try? text.write(to: file, atomically: true, encoding: .utf8)
+        web?.evaluate(script) { [weak self] result, _ in
+            MainActor.assumeIsolated {
+                guard let self, self.storageGeneration == generation,
+                      let text = result as? String, text.contains("\"profile\"") else { return }
+                try? text.write(to: file, atomically: true, encoding: .utf8)
+            }
+        }
+    }
+
+    /**
+     * Signing out: the kept copy goes (else, should tvOS empty the page's storage, the sign-in would
+     * come back with it). A copy is kept again once the page has signed out.
+     */
+    func forgetStorage() {
+        storageGeneration += 1
+        try? FileManager.default.removeItem(at: Self.storageFile)
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            self?.keepStorage()
         }
     }
 
@@ -255,6 +276,7 @@ final class Page: NSObject {
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(20))
                     self?.keepStorage()
+                    guard self != nil else { return }
                     try? await Task.sleep(for: .seconds(100))
                 }
             }

@@ -10,6 +10,7 @@ final class PlayerHost: UIHostingController<AnyView> {
 
     private static weak var shown: PlayerHost?
     private weak var playback: Playback?
+    private weak var stremio: Stremio?
 
     @MainActor
     static func show(_ playback: Playback, stremio: Stremio) {
@@ -19,6 +20,7 @@ final class PlayerHost: UIHostingController<AnyView> {
         }
         let host = PlayerHost(rootView: AnyView(PlayerScreen(playback: playback).environment(stremio).preferredColorScheme(.dark)))
         host.playback = playback
+        host.stremio = stremio
         host.modalPresentationStyle = .fullScreen
         host.view.backgroundColor = .black
         shown = host
@@ -30,15 +32,24 @@ final class PlayerHost: UIHostingController<AnyView> {
     private static func present(_ host: PlayerHost, tries: Int) {
         guard shown === host, host.presentingViewController == nil else { return }
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
-              var top = scene.keyWindow?.rootViewController ?? scene.windows.first?.rootViewController else { return }
+              var top = scene.keyWindow?.rootViewController ?? scene.windows.first?.rootViewController else { return giveUp(host) }
         while let next = top.presentedViewController, !next.isBeingDismissed { top = next }
         let busy = top.transitionCoordinator != nil || top.isBeingDismissed || top.isBeingPresented || top.presentedViewController != nil
         if busy {
-            guard tries < 40 else { return }
+            guard tries < 40 else { return giveUp(host) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { present(host, tries: tries + 1) }
             return
         }
         top.present(host, animated: true)
+    }
+
+    /** It couldn't be shown: the stream stops too, rather than play on with no screen to stop it from */
+    @MainActor
+    private static func giveUp(_ host: PlayerHost) {
+        guard shown === host else { return }
+        shown = nil
+        host.playback?.finish(ended: false)
+        host.stremio?.show("The player couldn't open: try again")
     }
 
     @MainActor
