@@ -66,6 +66,7 @@ struct HomeView: View {
                         .focusable()
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, 80)
         }
         .scrollClipDisabled()

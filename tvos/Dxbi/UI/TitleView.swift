@@ -40,6 +40,9 @@ struct TitleView: View {
                 if ref.type == "series" { episodes }
                 people
             }
+            // full width from the first frame: until the episodes or cast came, the page was only as wide
+            // as its words, and SwiftUI centred it (an upright column that then jumped across)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, 80)
         }
         .scrollClipDisabled()
@@ -222,7 +225,7 @@ struct TitleView: View {
             buttons.padding(.top, 10)
         }
         .padding(.horizontal, TV.gutter)
-        .frame(minHeight: 860, alignment: .bottomLeading)
+        .frame(maxWidth: .infinity, minHeight: 860, alignment: .bottomLeading)
     }
 
     private var buttons: some View {

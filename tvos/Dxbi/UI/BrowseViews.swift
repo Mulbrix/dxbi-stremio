@@ -55,6 +55,7 @@ struct SearchView: View {
                 .padding(.top, 30)
                 if searched.isEmpty { start } else { results }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, 60)
         }
         .scrollClipDisabled()
@@ -161,6 +162,7 @@ struct DiscoverView: View {
                     ProgressView().frame(maxWidth: .infinity).padding(80)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, 60)
         }
         .scrollClipDisabled()
@@ -265,6 +267,7 @@ struct LibraryView: View {
                     PosterGrid(items: stremio.library) { stremio.libraryMore() }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, 60)
         }
         .scrollClipDisabled()
