@@ -27,6 +27,8 @@ struct PlayerScreen: View {
     @State private var now = Date()
     @State private var lastStep = Date.distantPast
     @State private var steps = 0
+    /** When a finger last glided on the remote (the swipe's own left or right then doesn't step too) */
+    @State private var lastGlide = Date.distantPast
     @FocusState private var focus: Focus?
 
     private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -56,6 +58,8 @@ struct PlayerScreen: View {
         }
         .onReceive(clock) { now = $0 }
         .onAppear { poke() }
+        // a finger gliding on the remote's touch surface moves through the video as it goes
+        .background(RemoteGlide(enabled: { glideOn }, moved: glide, ended: { lastGlide = Date() }))
         // the TV to the video's HDR and frame rate (Match Content), once mpv knows them
         .task { await DisplayMatch.follow(playback.mpv) }
     }
@@ -70,8 +74,8 @@ struct PlayerScreen: View {
             .disabled(visible || panel != nil)
             .onMoveCommand { direction in
                 switch direction {
-                case .left: skip(-10)
-                case .right: skip(10)
+                case .left: if !gliding { skip(-10) }
+                case .right: if !gliding { skip(10) }
                 default: poke()
                 }
             }
@@ -168,8 +172,8 @@ struct PlayerScreen: View {
             .focused($focus, equals: .bar)
             .onMoveCommand { direction in
                 switch direction {
-                case .left: step(forward: false)
-                case .right: step(forward: true)
+                case .left: if !gliding { step(forward: false) }
+                case .right: if !gliding { step(forward: true) }
                 case .up: hide()
                 default: break
                 }
@@ -220,6 +224,30 @@ struct PlayerScreen: View {
         let from = scrub ?? playback.position
         scrub = min(max(from + (forward ? size : -size), 0), max(playback.duration - 2, 0))
         hideTask?.cancel()
+    }
+
+    // MARK: - Gliding through the video
+
+    /** A glide moves through the video on the seek bar, or with the controls away (not in a menu or the buttons) */
+    private var glideOn: Bool {
+        panel == nil && playback.duration > 0 && (!visible || focus == .bar || focus == .surface)
+    }
+
+    private var gliding: Bool { Date().timeIntervalSince(lastGlide) < 0.5 }
+
+    /**
+     * The finger moved [dx] across the touch surface ([width] its whole width) at [speed]: the point to
+     * go to moves with it. Slowly for small changes; quickly, a whole swipe goes up to a third of the
+     * video (30 minutes at most). Glides add up; select (or Play/Pause) goes there
+     */
+    private func glide(_ dx: CGFloat, width: CGFloat, speed: CGFloat) {
+        lastGlide = Date()
+        if !visible { poke() }
+        hideTask?.cancel()
+        let span = min(max(playback.duration * 0.35, 90), 1800)
+        let reach = 0.3 + 0.7 * min(abs(Double(speed)) / 2500, 1)
+        let from = scrub ?? playback.position
+        scrub = min(max(from + Double(dx / max(width, 1)) * span * reach, 0), max(playback.duration - 2, 0))
     }
 
     // MARK: - Skip, up next, messages
@@ -358,6 +386,89 @@ struct PlayerScreen: View {
             .background(.regularMaterial)
         }
         .ignoresSafeArea()
+    }
+}
+
+/**
+ * The finger on the remote's touch surface as it moves, for gliding through the video (SwiftUI on tvOS
+ * only hears whole swipes, as steps). Watches the window while the player shows; only horizontal
+ * movement, and only when [enabled]; the focus engine still has the touches too.
+ */
+private struct RemoteGlide: UIViewRepresentable {
+    var enabled: () -> Bool
+    /** How far the finger went since last time, the surface's width, and its speed */
+    var moved: (CGFloat, CGFloat, CGFloat) -> Void
+    var ended: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> Anchor {
+        let view = Anchor()
+        view.isUserInteractionEnabled = false
+        view.coordinator = context.coordinator
+        return view
+    }
+
+    func updateUIView(_ view: Anchor, context: Context) {
+        context.coordinator.enabled = enabled
+        context.coordinator.moved = moved
+        context.coordinator.ended = ended
+    }
+
+    static func dismantleUIView(_ view: Anchor, coordinator: Coordinator) { coordinator.detach() }
+
+    final class Anchor: UIView {
+        weak var coordinator: Coordinator?
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if let window { coordinator?.attach(to: window) } else { coordinator?.detach() }
+        }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var enabled: () -> Bool = { false }
+        var moved: (CGFloat, CGFloat, CGFloat) -> Void = { _, _, _ in }
+        var ended: () -> Void = {}
+        private var pan: UIPanGestureRecognizer?
+        private var last: CGFloat = 0
+
+        func attach(to window: UIWindow) {
+            guard pan == nil else { return }
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(panned(_:)))
+            pan.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
+            pan.cancelsTouchesInView = false
+            pan.delegate = self
+            window.addGestureRecognizer(pan)
+            self.pan = pan
+        }
+
+        func detach() {
+            if let pan { pan.view?.removeGestureRecognizer(pan) }
+            pan = nil
+        }
+
+        @objc func panned(_ g: UIPanGestureRecognizer) {
+            guard let view = g.view else { return }
+            let x = g.translation(in: view).x
+            switch g.state {
+            case .began:
+                last = x
+            case .changed:
+                moved(x - last, view.bounds.width, g.velocity(in: view).x)
+                last = x
+            default:
+                ended()
+            }
+        }
+
+        func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+            guard enabled(), let pan = g as? UIPanGestureRecognizer, let view = pan.view else { return false }
+            let v = pan.velocity(in: view)
+            return abs(v.x) > abs(v.y)
+        }
+
+        func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
     }
 }
 

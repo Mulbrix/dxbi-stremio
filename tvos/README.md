@@ -20,7 +20,8 @@ Good to know:
 | | Controls away | Controls up (on the seek bar) |
 |---|---|---|
 | Select or Play/Pause | Pause or play (Skip Intro, or the next episode, when shown) | Pause or play, or go to the point chosen |
-| Left / right | Back or forward 10 seconds | Choose a point (faster the more you press) |
+| Left / right (click) | Back or forward 10 seconds | Choose a point, 10 seconds a click (faster the more you click) |
+| Glide a finger left / right | Show the controls and choose a point | Choose a point, following the finger (slowly for small moves) |
 | Up / down | Show the controls | Up hides them; down reaches Subtitles, Audio, Speed, Picture |
 | Menu | Close the player | Hide the controls (close the player when paused) |
 
