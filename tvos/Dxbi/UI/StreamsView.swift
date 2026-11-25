@@ -52,7 +52,6 @@ struct StreamsView: View {
             .frame(maxWidth: .infinity)
         }
         .scrollClipDisabled()
-        .background(Color.black.opacity(0.6).ignoresSafeArea())
     }
 
     private func pick(_ best: StreamOption) -> some View {
@@ -154,6 +153,20 @@ struct StreamsView: View {
                 .focusable()
         } else if shown.isEmpty {
             Text("Nothing matches those filters.").foregroundStyle(Dx.muted).padding()
+        }
+    }
+}
+
+extension View {
+    /** A full-screen cover over the title's own art, blurred and darkened (the page it came from, faded back) */
+    func coverBackdrop(_ art: URL?) -> some View {
+        background {
+            ZStack {
+                Color.black
+                Art(url: art).blur(radius: 50, opaque: true).opacity(0.5)
+                Color.black.opacity(0.55)
+            }
+            .ignoresSafeArea()
         }
     }
 }

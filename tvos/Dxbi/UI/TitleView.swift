@@ -15,6 +15,9 @@ struct TitleView: View {
     /** Play was pressed for this video: dx.bi's pick plays as soon as it's sure */
     @State private var waitingFor: String?
     @State private var streamsOpen = false
+    /** Play was pressed and dx.bi is picking the stream: a small "finding" over the page, not the whole list */
+    @State private var finding = false
+    @FocusState private var chooseFocused: Bool
     @State private var season: Int?
     @State private var reviews: Reviews?
     @State private var reviewsOpen = false
@@ -40,6 +43,10 @@ struct TitleView: View {
             .padding(.bottom, 80)
         }
         .scrollClipDisabled()
+        // (the page waits under "finding": the remote stays on it)
+        .disabled(finding)
+        .overlay { if finding { findingOverlay } }
+        .animation(.easeOut(duration: 0.2), value: finding)
         .background {
             // the art across the screen, darkened where the words are
             Art(url: title.backdrop)
@@ -48,11 +55,13 @@ struct TitleView: View {
                 .ignoresSafeArea()
         }
         .background(Color.black.ignoresSafeArea())
-        .sheet(isPresented: $streamsOpen) {
+        // (full screen: tvOS shows a sheet as a narrow upright card)
+        .fullScreenCover(isPresented: $streamsOpen) {
             StreamsView(choices: current, heading: title.name, subheading: episodeLine) { option, target in play(option, in: target) }
+                .coverBackdrop(title.backdrop)
         }
-        .sheet(isPresented: $reviewsOpen) { ReviewsView(title: title, reviews: reviews) }
-        .sheet(isPresented: $aboutOpen) { AboutView(title: title, details: details) }
+        .fullScreenCover(isPresented: $reviewsOpen) { ReviewsView(title: title, reviews: reviews).coverBackdrop(title.backdrop) }
+        .fullScreenCover(isPresented: $aboutOpen) { AboutView(title: title, details: details).coverBackdrop(title.backdrop) }
         .task(id: ref.id) {
             if stremio.details?.metaId != ref.id { stremio.open(ref.type, ref.id) }
             reviews = await stremio.reviews(ref.type, ref.id)
@@ -82,16 +91,26 @@ struct TitleView: View {
             guard details?.videoId != nil else { return }
             choices = await stremio.streams()
             justPlayIfSure()
+            // nothing to pick from, or picking is theirs (Just press Play off): the list
+            if finding, let c = current, !c.justPlay || (c.settled && c.picked == nil) { showList() }
         }
         .task(id: waitingFor) {
             guard waitingFor != nil else { return }
             try? await Task.sleep(for: .seconds(6))
-            if let c = current, c.justPlay, waitingFor == c.videoId, let pick = c.picked { play(pick) }
+            if let c = current, c.justPlay, waitingFor == c.videoId, let pick = c.picked { play(pick) } else if finding { showList() }
         }
         .onAppear { playFocused = true }
         // Menu goes back to where the title was opened from, always (with nothing focused, tvOS took
         // it as leaving the app)
-        .onExitCommand { dismiss() }
+        .onExitCommand {
+            // (Menu while dx.bi picks stops that, and stays on the page)
+            if finding {
+                finding = false
+                waitingFor = nil
+            } else {
+                dismiss()
+            }
+        }
         // back from the player: the focus comes back to the page (it was left nowhere)
         .onChange(of: stremio.playback == nil) { _, closed in
             guard closed else { return }
@@ -118,8 +137,34 @@ struct TitleView: View {
             stremio.open(ref.type, ref.id, videoId: videoId)
         }
         waitingFor = target
-        streamsOpen = true
+        // Just press Play: a small "finding" while dx.bi picks (the whole list only when it can't, or
+        // when picking is theirs), so the list doesn't come and go before the player
+        if current?.justPlay == false { streamsOpen = true } else { finding = true }
         justPlayIfSure()
+    }
+
+    private func showList() {
+        finding = false
+        streamsOpen = true
+    }
+
+    private var findingOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.55).ignoresSafeArea()
+            VStack(spacing: 26) {
+                ProgressView().scaleEffect(1.4)
+                Text("Finding the best stream…").font(.title3.bold())
+                if let line = episodeLine { Text(line).font(.headline).foregroundStyle(Dx.muted) }
+                Button("Choose a Stream") { showList() }
+                    .focused($chooseFocused)
+                    .padding(.top, 10)
+            }
+            .padding(.horizontal, 80)
+            .padding(.vertical, 60)
+            .background(.regularMaterial, in: .rect(cornerRadius: 32))
+        }
+        .transition(.opacity)
+        .onAppear { chooseFocused = true }
     }
 
     /** Just press Play: the stream chosen last time plays at once, anything else once every addon has answered */
@@ -130,6 +175,7 @@ struct TitleView: View {
 
     private func play(_ option: StreamOption, in target: Stremio.Target = .player) {
         waitingFor = nil
+        finding = false
         streamsOpen = false
         stremio.play(option, in: target)
     }
