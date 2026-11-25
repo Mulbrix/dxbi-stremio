@@ -55,7 +55,8 @@ enum DisplayMatch {
         resetting?.cancel()
         resetting = Task {
             try? await Task.sleep(for: .seconds(4))
-            if !Task.isCancelled { manager?.preferredDisplayCriteria = nil }
+            // (only when the TV was switched: asking again for the mode it's in can still blank it)
+            if !Task.isCancelled, let manager, manager.preferredDisplayCriteria != nil { manager.preferredDisplayCriteria = nil }
         }
     }
 }

@@ -97,6 +97,10 @@ struct TitleView: View {
             guard closed else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { playFocused = true }
         }
+        // and again whenever the app wants it back (the TV changed mode after the player, say)
+        .onReceive(NotificationCenter.default.publisher(for: .dxRefocus)) { _ in
+            if stremio.playback == nil { playFocused = true }
+        }
     }
 
     // MARK: - Playing

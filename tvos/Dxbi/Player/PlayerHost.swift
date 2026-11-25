@@ -57,11 +57,9 @@ final class PlayerHost: UIHostingController<AnyView> {
         guard let host = shown else { return }
         shown = nil
         DisplayMatch.reset()
-        let presenter = host.presentingViewController
         host.dismiss(animated: true) {
             // the remote's focus back on the app's screens (left nowhere, Menu would leave the app)
-            presenter?.setNeedsFocusUpdate()
-            presenter?.updateFocusIfNeeded()
+            Refocus.now()
         }
     }
 

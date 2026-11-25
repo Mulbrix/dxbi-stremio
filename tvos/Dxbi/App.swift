@@ -145,6 +145,7 @@ struct PageAnchor: UIViewRepresentable {
             page.alpha = 0.02
             page.isUserInteractionEnabled = false
             window.insertSubview(page, at: 0)
+            Refocus.watch(window)
         }
     }
 }
