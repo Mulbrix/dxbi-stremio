@@ -64,7 +64,8 @@ final class PlayerHost: UIHostingController<AnyView> {
     }
 
     @MainActor
-    static func hide() {
+    /** [next]: the next episode's player follows (the Apple TV app keeps the TV's mode for it) */
+    static func hide(next: Bool = false) {
         guard let host = shown else { return }
         shown = nil
         AppDelegate.orientations = .portrait

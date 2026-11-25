@@ -53,10 +53,11 @@ final class PlayerHost: UIHostingController<AnyView> {
     }
 
     @MainActor
-    static func hide() {
+    /** [next]: the next episode's player follows (the TV stays in its mode for it) */
+    static func hide(next: Bool = false) {
         guard let host = shown else { return }
         shown = nil
-        DisplayMatch.reset()
+        DisplayMatch.reset(keep: next)
         host.dismiss(animated: true) {
             // the remote's focus back on the app's screens (left nowhere, Menu would leave the app)
             Refocus.now()
@@ -68,7 +69,7 @@ final class PlayerHost: UIHostingController<AnyView> {
         super.viewDidDisappear(animated)
         if Self.shown === self {
             Self.shown = nil
-            DisplayMatch.reset()
+            DisplayMatch.reset(keep: false)
             playback?.finish(ended: false)
         }
     }

@@ -50,13 +50,22 @@ enum DisplayMatch {
         manager.preferredDisplayCriteria = AVDisplayCriteria(refreshRate: Float(max(format.fps, 0)), formatDescription: description)
     }
 
-    /** The player closed: the Apple TV's own mode again, unless another video starts in the meantime */
-    static func reset() {
+    /**
+     * The player closed: the Apple TV's own mode again, straight away. [keep]: the next episode's
+     * player follows, so the TV stays as it is for it (it would switch back and forth), unless that
+     * doesn't come
+     */
+    static func reset(keep: Bool) {
         resetting?.cancel()
+        guard keep else { return release() }
         resetting = Task {
-            try? await Task.sleep(for: .seconds(4))
-            // (only when the TV was switched: asking again for the mode it's in can still blank it)
-            if !Task.isCancelled, let manager, manager.preferredDisplayCriteria != nil { manager.preferredDisplayCriteria = nil }
+            try? await Task.sleep(for: .seconds(8))
+            if !Task.isCancelled { release() }
         }
+    }
+
+    private static func release() {
+        // (only when the TV was switched: asking again for the mode it's in can still blank it)
+        if let manager, manager.preferredDisplayCriteria != nil { manager.preferredDisplayCriteria = nil }
     }
 }

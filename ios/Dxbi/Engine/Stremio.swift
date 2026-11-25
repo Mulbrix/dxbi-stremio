@@ -561,6 +561,6 @@ final class Stremio {
         ]
         page.js("window.__dxbiIos.active = ''; window.__dxbiIos.pendingClose = \(Json.quote(Json.encode(close))); window.__dxbiTv && window.__dxbiTv.playerClosed && window.__dxbiTv.playerClosed()")
         playback = nil
-        PlayerHost.hide()
+        PlayerHost.hide(next: next)
     }
 }
